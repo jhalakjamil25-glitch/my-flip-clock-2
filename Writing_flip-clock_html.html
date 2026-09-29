@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cream">
+<head><base href="https://d16ilfvy4mv02r.cloudfront.net/workspaces/yLwe7kbYiXHtcwChoRRpgr8lnYvAI7K3/2db67ef5-f39d-4528-bbbb-64ea1f6c9ad6/files/">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flip Clock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ================= THEMES ================= */
+:root{
+  --card-h: 130px;
+  --card-w: calc(var(--card-h) / 1.10);
+  --radius-factor: 0.12;
+  --gap-factor: 0.085;
+  --radius: calc(var(--card-w) * var(--radius-factor));
+  --gap: calc(var(--card-w) * var(--gap-factor));
+  --digit-size: calc(var(--card-h) * 0.61);
+  --digit-tracking: 0.055em;
+  --shadow-alpha: 0.20;
+  --shadow-blur: calc(var(--card-h) * 0.16);
+  --shadow-y: calc(var(--card-h) * 0.07);
+  --flip-ms: 340ms;
+}
+html[data-theme="cream"]{    --bg:#FAEBDD; --card:#222222; --digit:#FFFFFF; --ink:#171717; }
+html[data-theme="ivory"]{    --bg:#F6F4EF; --card:#121212; --digit:#FFFFFF; --ink:#121212; }
+html[data-theme="blush"]{    --bg:#F7E4E4; --card:#2A1E22; --digit:#FFF5F6; --ink:#2A1E22; }
+html[data-theme="sage"]{     --bg:#E8EEE5; --card:#1E2A22; --digit:#F4FFF7; --ink:#1E2A22; }
+html[data-theme="sky"]{      --bg:#E4EDF6; --card:#14202E; --digit:#F2F7FF; --ink:#14202E; }
+html[data-theme="charcoal"]{ --bg:#191919; --card:#2C2C2C; --digit:#F6F0E7; --ink:#EFE7DA; }
+
+*{ box-sizing:border-box; }
+html,body{ height:100%; margin:0; }
+body{
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  display:flex; align-items:center; justify-content:center;
+  overflow:hidden;
+  transition: background .35s ease, color .35s ease;
+}
+
+/* ================= STAGE ================= */
+.stage{
+  transform: scale(var(--fit,1));
+  transform-origin: center center;
+  display:flex; flex-direction:column; align-items:center;
+  gap: calc(var(--card-h) * 0.14);
+  padding: 28px;
+}
+.caption{
+  font-family: var(--font-ui);
+  font-size: calc(var(--card-h) * 0.11);
+  font-weight:700;
+  letter-spacing:.16em; text-transform:uppercase;
+  color: var(--ink); opacity:.6; text-align:center;
+}
+.caption:empty{ display:none; }
+
+.clock{ display:flex; align-items:flex-start; gap: var(--gap); }
+
+/* ================= CARD ================= */
+.card{
+  position:relative;
+  width: var(--card-w);
+  height: var(--card-h);
+  border-radius: var(--radius);
+  perspective: 1000px;
+  box-shadow: 0 var(--shadow-y) var(--shadow-blur) rgba(0,0,0,var(--shadow-alpha));
+  font-family: var(--font-digits);
+  font-weight: var(--digit-weight);
+  font-size: var(--digit-size);
+  letter-spacing: var(--digit-tracking);
+  text-indent: var(--digit-tracking);
+  color: var(--digit);
+  transition: border-radius .2s ease;
+}
+.half{
+  position:absolute; left:0; width:100%; height:50%;
+  overflow:hidden; background: var(--card);
+  color: var(--digit);
+}
+.half.top{ top:0; border-radius: var(--radius) var(--radius) 0 0; }
+.half.bottom{ bottom:0; border-radius: 0 0 var(--radius) var(--radius); }
+.half .val{
+  position:absolute; left:0; width:100%; height: var(--card-h);
+  line-height: var(--card-h); text-align:center;
+}
+.half.top .val{ top:0; }
+.half.bottom .val{ top: calc(var(--card-h) * -0.5); }
+
+/* subtle top-light / bottom-shade, like a real flip clock */
+.half.top::after{
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background: linear-gradient(to bottom, rgba(255,255,255,.05), rgba(0,0,0,.10));
+}
+.half.bottom::after{
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background: linear-gradient(to bottom, rgba(0,0,0,.16), rgba(255,255,255,.02));
+}
+/* the seam across the middle */
+.card::after, .meridiem::after{
+  content:''; position:absolute; left:0; right:0; top:50%;
+  height: max(1px, calc(var(--card-h) * 0.012));
+  transform: translateY(-50%);
+  background: rgba(0,0,0,.55);
+  z-index:8; pointer-events:none;
+}
+
+/* animated flaps */
+.flap{
+  position:absolute; left:0; width:100%; height:50%;
+  overflow:hidden; backface-visibility:hidden;
+  visibility:hidden; background: var(--card); color: var(--digit);
+}
+.flap .val{
+  position:absolute; left:0; width:100%; height: var(--card-h);
+  line-height: var(--card-h); text-align:center;
+}
+.flap.top{
+  top:0; transform-origin: bottom center; z-index:6;
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.flap.top .val{ top:0; }
+.flap.bottom{
+  bottom:0; transform-origin: top center; z-index:5;
+  border-radius: 0 0 var(--radius) var(--radius);
+  transform: rotateX(90deg);
+}
+.flap.bottom .val{ top: calc(var(--card-h) * -0.5); }
+
+.card.animating .flap{ visibility:visible; }
+.card.animating .flap.top{ animation: flipTop var(--flip-ms) cubic-bezier(.36,0,.68,1) forwards; }
+.card.animating .flap.bottom{ animation: flipBottom var(--flip-ms) cubic-bezier(.36,0,.68,1) forwards; }
+@keyframes flipTop{ from{ transform: rotateX(0deg); } to{ transform: rotateX(-90deg); } }
+@keyframes flipBottom{ from{ transform: rotateX(90deg); } to{ transform: rotateX(0deg); } }
+
+/* ================= COLONS ================= */
+.colon{
+  align-self:center;
+  display:flex; flex-direction:column; align-items:center;
+  gap: calc(var(--card-h) * 0.105);
+  width: calc(var(--card-h) * 0.062);
+}
+.colon i{
+  display:block;
+  width: calc(var(--card-h) * 0.062);
+  height: calc(var(--card-h) * 0.068);
+  border-radius: 30%;
+  background: var(--digit);
+}
+body.blink .colon i{ animation: blink 1s steps(1,end) infinite; }
+@keyframes blink{ 0%,50%{ opacity:1 } 50.01%,100%{ opacity:.15 } }
+body:not(.show-seconds) .seconds-card, body:not(.show-seconds) .seconds-colon{ display:none; }
+
+/* ================= AM / PM ================= */
+.meridiem{
+  position:relative;
+  align-self:flex-end;
+  margin-left: calc(3px - var(--gap));
+  margin-bottom: calc(var(--card-h) * 0.025);
+  width: calc(var(--card-w) * 0.57);
+  height: calc(var(--card-h) * 0.36);
+  border-radius: calc(var(--radius) * 0.9);
+  background: var(--card);
+  color: var(--digit);
+  display:grid; place-items:center;
+  font-family: var(--font-ui);
+  font-weight: 800;
+  font-size: calc(var(--card-h) * 0.20);
+  letter-spacing:.01em;
+  box-shadow: 0 var(--shadow-y) var(--shadow-blur) rgba(0,0,0,var(--shadow-alpha));
+  overflow:hidden;
+}
+.meridiem::after{ background: rgba(0,0,0,.5); }
+body.fmt24 .meridiem, body.hide-ampm .meridiem{ display:none; }
+
+/* ================= DATE ================= */
+.date{
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: calc(var(--card-h) * 0.28);
+  line-height: 1.15;
+  color: var(--ink);
+  text-align:center;
+  margin-top: calc(var(--card-h) * 0.02);
+}
+body:not(.show-date) .date{ display:none; }
+
+/* ================= TOOLBAR + PANEL (neutral UI) ================= */
+.toolbar{ position:fixed; top:16px; right:16px; display:flex; gap:8px; z-index:40; transition: opacity .3s ease; }
+.icon-btn{
+  width:42px; height:42px; border-radius:12px; cursor:pointer;
+  border:1px solid rgba(0,0,0,.12); background:rgba(255,255,255,.82);
+  color:#1a1a1a; font-size:17px; line-height:1;
+  display:grid; place-items:center; backdrop-filter: blur(10px);
+  box-shadow: 0 6px 18px rgba(0,0,0,.10);
+  transition: transform .15s ease, background .2s ease;
+}
+.icon-btn:hover{ transform: translateY(-2px); background:#fff; }
+
+.panel{
+  position:fixed; top:0; right:0; height:100%; width:330px; z-index:50;
+  background:#ffffff; color:#1a1a1a;
+  border-left:1px solid rgba(0,0,0,.10);
+  box-shadow:-20px 0 60px rgba(0,0,0,.12);
+  transform: translateX(102%);
+  transition: transform .35s cubic-bezier(.4,0,.2,1), opacity .3s ease;
+  display:flex; flex-direction:column;
+}
+body.panel-open .panel{ transform: translateX(0); }
+.panel-head{ display:flex; align-items:center; justify-content:space-between; padding:18px 20px 14px; border-bottom:1px solid rgba(0,0,0,.08); }
+.panel-head h2{ margin:0; font-size:13px; letter-spacing:.18em; text-transform:uppercase; }
+.panel-head .icon-btn{ width:34px; height:34px; font-size:14px; background:#f4f4f4; box-shadow:none; }
+.panel-body{ overflow-y:auto; padding:16px 20px 40px; }
+.panel-body::-webkit-scrollbar{ width:8px; }
+.panel-body::-webkit-scrollbar-thumb{ background:rgba(0,0,0,.18); border-radius:8px; }
+
+fieldset{ border:0; margin:0 0 18px; padding:0; }
+legend{ font-size:10px; letter-spacing:.24em; text-transform:uppercase; color:#8b8b8b; margin-bottom:10px; padding:0; }
+.row{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:7px 0; }
+.row label{ font-size:13.5px; }
+.row .val{ font-size:11px; color:#8b8b8b; min-width:42px; text-align:right; font-variant-numeric: tabular-nums; }
+
+input[type="text"]{
+  width:100%; padding:9px 11px; border-radius:10px; font:inherit; font-size:13px;
+  border:1px solid rgba(0,0,0,.15); background:#fafafa; color:#1a1a1a;
+}
+select{
+  padding:8px 10px; border-radius:10px; font:inherit; font-size:13px; max-width:180px;
+  border:1px solid rgba(0,0,0,.15); background:#fafafa; color:#1a1a1a;
+}
+input[type="range"]{
+  -webkit-appearance:none; appearance:none; flex:1; height:4px; border-radius:4px;
+  background:rgba(0,0,0,.18); outline:none;
+}
+input[type="range"]::-webkit-slider-thumb{
+  -webkit-appearance:none; width:16px; height:16px; border-radius:50%;
+  background:#222; cursor:pointer; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.3);
+}
+input[type="range"]::-moz-range-thumb{
+  width:16px; height:16px; border-radius:50%; background:#222; border:2px solid #fff; cursor:pointer;
+}
+input[type="checkbox"]{
+  -webkit-appearance:none; appearance:none; width:42px; height:24px; border-radius:99px;
+  background:rgba(0,0,0,.18); position:relative; cursor:pointer; flex:none; transition: background .2s ease;
+}
+input[type="checkbox"]::after{
+  content:''; position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%;
+  background:#fff; transition: transform .2s ease;
+}
+input[type="checkbox"]:checked{ background:#222; }
+input[type="checkbox"]:checked::after{ transform: translateX(18px); }
+
+.swatches{ display:grid; grid-template-columns: repeat(6, 1fr); gap:8px; }
+.swatch{
+  aspect-ratio:1; border-radius:10px; cursor:pointer; border:2px solid transparent;
+  position:relative; overflow:hidden; padding:0;
+}
+.swatch[data-active="1"]{ border-color:#222; }
+.swatch span{ position:absolute; inset:0; display:block; }
+.swatch span:first-child{ background: var(--sw-bg); }
+.swatch span:last-child{ clip-path: polygon(0 100%, 100% 0, 100% 100%); background: var(--sw-card); }
+
+.colors{ display:grid; grid-template-columns: repeat(3,1fr); gap:10px; }
+.color-field{ display:flex; flex-direction:column; gap:6px; align-items:center; }
+.color-field label{ font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:#8b8b8b; }
+input[type="color"]{
+  -webkit-appearance:none; appearance:none; width:100%; height:34px; padding:0; cursor:pointer;
+  border-radius:10px; border:1px solid rgba(0,0,0,.15); background:transparent;
+}
+input[type="color"]::-webkit-color-swatch-wrapper{ padding:2px; }
+input[type="color"]::-webkit-color-swatch{ border:none; border-radius:8px; }
+
+.btn{
+  width:100%; padding:11px; border-radius:11px; cursor:pointer; font:inherit; font-size:13px; font-weight:600;
+  border:1px solid rgba(0,0,0,.15); background:#fafafa; color:#1a1a1a; transition: background .2s ease;
+}
+.btn:hover{ background:#f0f0f0; }
+.hint{ font-size:11px; color:#8b8b8b; line-height:1.5; margin-top:6px; }
+
+body.zen .toolbar, body.zen .panel{ opacity:0; pointer-events:none; }
+
+@media (max-width: 720px){
+  .panel{ width:100%; height:74%; top:auto; bottom:0; border-left:0; border-radius:20px 20px 0 0; transform: translateY(103%); }
+  body.panel-open .panel{ transform: translateY(0); }
+  .stage{ padding:16px; }
+}
+</style>
+</head>
+<body class="show-seconds show-date blink">
+
+<div class="stage" id="stage">
+  <div class="caption" id="caption"></div>
+
+  <div class="clock" id="clock">
+    <div class="card" data-card="0">
+      <div class="half top"><span class="val">07</span></div>
+      <div class="half bottom"><span class="val">07</span></div>
+      <div class="flap top"><span class="val">07</span></div>
+      <div class="flap bottom"><span class="val">07</span></div>
+    </div>
+
+    <div class="colon"><i></i><i></i></div>
+
+    <div class="card" data-card="1">
+      <div class="half top"><span class="val">41</span></div>
+      <div class="half bottom"><span class="val">41</span></div>
+      <div class="flap top"><span class="val">41</span></div>
+      <div class="flap bottom"><span class="val">41</span></div>
+    </div>
+
+    <div class="colon seconds-colon"><i></i><i></i></div>
+
+    <div class="card seconds-card" data-card="2">
+      <div class="half top"><span class="val">50</span></div>
+      <div class="half bottom"><span class="val">50</span></div>
+      <div class="flap top"><span class="val">50</span></div>
+      <div class="flap bottom"><span class="val">50</span></div>
+    </div>
+
+    <div class="meridiem" id="meridiem">PM</div>
+  </div>
+
+  <div class="date" id="date">Tuesday | September 29, 2026</div>
+</div>
+
+<div class="toolbar">
+  <button class="icon-btn" id="btnFull" title="Fullscreen">&#9974;</button>
+  <button class="icon-btn" id="btnPanel" title="Customise">&#9881;</button>
+</div>
+
+<aside class="panel" id="panel">
+  <div class="panel-head">
+    <h2>Customise</h2>
+    <button class="icon-btn" id="btnClose" title="Close">&#10005;</button>
+  </div>
+
+  <div class="panel-body">
+    <fieldset>
+      <legend>Display</legend>
+      <input type="text" id="captionInput" placeholder="Caption (optional)" maxlength="48">
+      <div class="row"><label for="c12">12-hour with AM / PM</label><input type="checkbox" id="c12" checked></div>
+      <div class="row"><label for="cSec">Show seconds</label><input type="checkbox" id="cSec" checked></div>
+      <div class="row"><label for="cSecOn">Blinking colons</label><input type="checkbox" id="cSecOn" checked></div>
+      <div class="row"><label for="cSound">Flip sound</label><input type="checkbox" id="cSound"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Date</legend>
+      <div class="row">
+        <label for="dateStyle">Format</label>
+        <select id="dateStyle">
+          <option value="long">Tuesday | September 29, 2026</option>
+          <option value="medium">Tue | Sep 29, 2026</option>
+          <option value="numeric">29/09/2026</option>
+          <option value="none">Hidden</option>
+        </select>
+      </div>
+      <div class="row"><label for="cPipe">Use &ldquo;|&rdquo; separator</label><input type="checkbox" id="cPipe" checked></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Colours</legend>
+      <div class="swatches" id="swatches"></div>
+      <div style="height:12px"></div>
+      <div class="colors">
+        <div class="color-field"><label>Card</label><input type="color" id="colCard" value="#222222"></div>
+        <div class="color-field"><label>Digits</label><input type="color" id="colDigit" value="#FFFFFF"></div>
+        <div class="color-field"><label>Background</label><input type="color" id="colBg" value="#FAEBDD"></div>
+      </div>
+      <div class="hint">Picking a colour overrides the preset. Reset clears it.</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Typeface</legend>
+      <div class="row">
+        <label for="fontSel">Clock font</label>
+        <select id="fontSel">
+          <option value="didone">Playfair / Didot</option>
+          <option value="didoneBold">Playfair Bold</option>
+          <option value="georgia">Georgia</option>
+          <option value="times">Times</option>
+          <option value="mono">Monospace</option>
+          <option value="sans">Sans</option>
+        </select>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Shape &amp; size</legend>
+      <div class="row"><label for="rSize">Size</label><input type="range" id="rSize" min="70" max="280" step="2"><span class="val" id="vSize"></span></div>
+      <div class="row"><label for="rGap">Spacing</label><input type="range" id="rGap" min="0" max="30" step="1"><span class="val" id="vGap"></span></div>
+      <div class="row"><label for="rRadius">Corner radius</label><input type="range" id="rRadius" min="0" max="40" step="1"><span class="val" id="vRadius"></span></div>
+      <div class="row"><label for="rShadow">Shadow</label><input type="range" id="rShadow" min="0" max="100" step="2"><span class="val" id="vShadow"></span></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Options</legend>
+      <button class="btn" id="btnZen">Hide interface (press H)</button>
+      <div class="hint">Press H to hide the panel and buttons, H again to bring them back. Your settings are remembered in this browser.</div>
+      <div style="height:10px"></div>
+      <button class="btn" id="btnReset">Reset to defaults</button>
+    </fieldset>
+  </div>
+</aside>
+
+<script>
+(function(){
+  "use strict";
+
+  var FLIP_MS = 340;
+
+  var THEMES = [
+    { id:'cream',    bg:'#FAEBDD', card:'#222222', digit:'#FFFFFF', ink:'#171717' },
+    { id:'ivory',    bg:'#F6F4EF', card:'#121212', digit:'#FFFFFF', ink:'#121212' },
+    { id:'blush',    bg:'#F7E4E4', card:'#2A1E22', digit:'#FFF5F6', ink:'#2A1E22' },
+    { id:'sage',     bg:'#E8EEE5', card:'#1E2A22', digit:'#F4FFF7', ink:'#1E2A22' },
+    { id:'sky',      bg:'#E4EDF6', card:'#14202E', digit:'#F2F7FF', ink:'#14202E' },
+    { id:'charcoal', bg:'#191919', card:'#2C2C2C', digit:'#F6F0E7', ink:'#EFE7DA' }
+  ];
+
+  var FONTS = {
+    didone:     { digits:"'Playfair Display', Didot, 'Bodoni MT', Garamond, Georgia, serif", weight:'400', size:0.61, ui:"'Playfair Display', Georgia, 'Times New Roman', serif", uiWeight:'700' },
+    didoneBold: { digits:"'Playfair Display', Didot, 'Bodoni MT', Georgia, serif",           weight:'700', size:0.60, ui:"'Playfair Display', Georgia, 'Times New Roman', serif", uiWeight:'800' },
+    georgia:    { digits:"Georgia, 'Times New Roman', serif",                                weight:'400', size:0.60, ui:"Georgia, 'Times New Roman', serif",                    uiWeight:'700' },
+    times:      { digits:"'Times New Roman', Times, serif",                                  weight:'400', size:0.63, ui:"'Times New Roman', Times, serif",                      uiWeight:'700' },
+    mono:       { digits:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",          weight:'500', size:0.53, ui:"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", uiWeight:'700' },
+    sans:       { digits:"system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif", weight:'500', size:0.55, ui:"system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif", uiWeight:'700' }
+  };
+
+  var DEFAULTS = {
+    caption:'',
+    format12:true,
+    seconds:true,
+    blink:true,
+    sound:false,
+    dateStyle:'long',
+    pipe:true,
+    theme:'cream',
+    font:'didone',
+    size:130,
+    gap:8.5,        // percent of card width
+    radius:12,      // percent of card width
+    shadow:20,      // percent alpha
+    card:'', digit:'', bg:''
+  };
+
+  var S = {};
+  try{ Object.assign(S, DEFAULTS, JSON.parse(localStorage.getItem('flipclock.settings') || '{}')); }
+  catch(e){ Object.assign(S, DEFAULTS); }
+
+  function save(){ try{ localStorage.setItem('flipclock.settings', JSON.stringify(S)); }catch(e){} }
+
+  var root = document.documentElement;
+  var cards = [].slice.call(document.querySelectorAll('.card'));
+  var captionEl = document.getElementById('caption');
+  var dateEl = document.getElementById('date');
+  var meridiemEl = document.getElementById('meridiem');
+  var clockEl = document.getElementById('clock');
+  var stageEl = document.getElementById('stage');
+
+  /* ---------------- sound ---------------- */
+  var actx = null;
+  function tickSound(i){
+    if(!S.sound) return;
+    try{
+      if(!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+      if(actx.state === 'suspended') actx.resume();
+      var t = actx.currentTime, osc = actx.createOscillator(), g = actx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = 760 + i * 60;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.05, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.055);
+      osc.connect(g); g.connect(actx.destination);
+      osc.start(t); osc.stop(t + 0.06);
+    }catch(e){}
+  }
+
+  /* ---------------- flip engine ---------------- */
+  function setCard(card, value, animate){
+    var cur = card.dataset.value || '';
+    if(cur === value) return false;
+
+    var sTop = card.querySelector('.half.top .val');
+    var sBot = card.querySelector('.half.bottom .val');
+    var fTop = card.querySelector('.flap.top .val');
+    var fBot = card.querySelector('.flap.bottom .val');
+
+    if(!animate || cur === ''){
+      sTop.textContent = value; sBot.textContent = value;
+      card.dataset.value = value;
+      return true;
+    }
+
+    fTop.textContent = cur;
+    fBot.textContent = value;
+    sTop.textContent = value;   // revealed as the top flap falls away
+    sBot.textContent = cur;     // stays put until the bottom flap lands
+
+    card.classList.add('animating');
+    clearTimeout(card._timer);
+    card._timer = setTimeout(function(){
+      card.classList.remove('animating');
+      sTop.textContent = value;
+      sBot.textContent = value;
+      card.dataset.value = value;
+    }, FLIP_MS);
+    return true;
+  }
+
+  var last = { h:'', m:'', s:'', ampm:'' };
+
+  function pad(n){ return String(n).padStart(2,'0'); }
+
+  function tick(force){
+    var now = new Date();
+    var h24 = now.getHours();
+    var ampm = h24 >= 12 ? 'PM' : 'AM';
+    var h = S.format12 ? ((h24 % 12) || 12) : h24;
+
+    var animate = !force && last.h !== '';
+
+    var changed = [
+      setCard(cards[0], pad(h), animate),
+      setCard(cards[1], pad(now.getMinutes()), animate),
+      setCard(cards[2], pad(now.getSeconds()), animate)
+    ];
+
+    last.h = pad(h); last.m = pad(now.getMinutes()); last.s = pad(now.getSeconds());
+
+    if(force || last.ampm !== ampm){ meridiemEl.textContent = ampm; last.ampm = ampm; }
+
+    if(animate && S.sound){ changed.forEach(function(c,i){ if(c && i > 0) tickSound(i); }); }
+
+    if(S.dateStyle !== 'none'){
+      dateEl.textContent = formatDate(now);
+    }
+  }
+
+  function formatDate(now){
+    var sep = S.pipe ? ' | ' : ' ';
+    var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    var d = now.getDate(), m = now.getMonth(), y = now.getFullYear();
+
+    if(S.dateStyle === 'numeric'){
+      return pad(d) + '/' + pad(m + 1) + '/' + y;
+    }
+    if(S.dateStyle === 'medium'){
+      return days[now.getDay()].slice(0,3) + sep + months[m].slice(0,3) + ' ' + d + ', ' + y;
+    }
+    return days[now.getDay()] + sep + months[m] + ' ' + d + ', ' + y;
+  }
+
+  /* ---------------- apply settings ---------------- */
+  function themeById(id){
+    for(var i=0;i<THEMES.length;i++){ if(THEMES[i].id === id) return THEMES[i]; }
+    return THEMES[0];
+  }
+
+  function apply(force){
+    root.dataset.theme = S.theme;
+
+    var f = FONTS[S.font] || FONTS.didone;
+    root.style.setProperty('--font-digits', f.digits);
+    root.style.setProperty('--digit-weight', f.weight);
+    root.style.setProperty('--font-ui', f.ui);
+    root.style.setProperty('--card-h', S.size + 'px');
+    root.style.setProperty('--digit-size', Math.round(S.size * f.size) + 'px');
+    root.style.setProperty('--gap-factor', (S.gap / 100).toFixed(3));
+    root.style.setProperty('--radius-factor', (S.radius / 100).toFixed(3));
+    root.style.setProperty('--shadow-alpha', (S.shadow / 100).toFixed(2));
+
+    if(S.card)  root.style.setProperty('--card', S.card);  else root.style.removeProperty('--card');
+    if(S.digit) root.style.setProperty('--digit', S.digit); else root.style.removeProperty('--digit');
+    if(S.bg){
+      root.style.setProperty('--bg', S.bg);
+      root.style.setProperty('--ink', readableInk(S.bg));
+    } else {
+      root.style.removeProperty('--bg');
+      root.style.removeProperty('--ink');
+    }
+
+    var b = document.body.classList;
+    b.toggle('fmt24', !S.format12);
+    b.toggle('show-seconds', !!S.seconds);
+    b.toggle('show-date', S.dateStyle !== 'none');
+    b.toggle('blink', !!S.blink);
+
+    captionEl.textContent = S.caption || '';
+
+    // reflect UI state
+    check('c12', S.format12);
+    check('cSec', S.seconds);
+    check('cSecOn', S.blink);
+    check('cSound', S.sound);
+    check('cPipe', S.pipe);
+    document.getElementById('captionInput').value = S.caption;
+    document.getElementById('dateStyle').value = S.dateStyle;
+    document.getElementById('fontSel').value = S.font;
+    range('rSize', S.size, 'vSize', S.size + 'px');
+    range('rGap', S.gap, 'vGap', S.gap + '%');
+    range('rRadius', S.radius, 'vRadius', S.radius + '%');
+    range('rShadow', S.shadow, 'vShadow', S.shadow + '%');
+
+    var t = themeById(S.theme);
+    document.getElementById('colCard').value  = S.card  || t.card;
+    document.getElementById('colDigit').value = S.digit || t.digit;
+    document.getElementById('colBg').value    = S.bg    || t.bg;
+
+    [].forEach.call(document.querySelectorAll('.swatch'), function(sw){
+      sw.dataset.active = (sw.dataset.theme === S.theme) ? '1' : '0';
+    });
+
+    last.h = '';           // force a clean repaint of every card
+    tick(true);
+    requestAnimationFrame(fit);
+    save();
+  }
+
+  function readableInk(hex){
+    var c = hex.replace('#','');
+    if(c.length === 3) c = c[0]+c[0]+c[1]+c[1]+c[2]+c[2];
+    var r = parseInt(c.substr(0,2),16), g = parseInt(c.substr(2,2),16), bl = parseInt(c.substr(4,2),16);
+    var lum = (0.299*r + 0.587*g + 0.114*bl) / 255;
+    return lum > 0.55 ? '#171717' : '#F5F1EA';
+  }
+
+  function check(id, v){ document.getElementById(id).checked = !!v; }
+  function range(id, v, outId, label){
+    document.getElementById(id).value = v;
+    document.getElementById(outId).textContent = label;
+  }
+
+  /* ---------------- fit to viewport ---------------- */
+  function fit(){
+    var panelOpen = document.body.classList.contains('panel-open') && window.innerWidth > 720;
+    var reserve = panelOpen ? 360 : 32;
+    var wide = Math.max(clockEl.scrollWidth, 1);
+    var avail = window.innerWidth - reserve;
+    var tall = Math.max(stageEl.scrollHeight, 1);
+    var availH = window.innerHeight - 40;
+    var s = Math.min(1, avail / wide, availH / tall);
+    stageEl.style.setProperty('--fit', Math.max(0.2, s));
+  }
+  try{
+    new MutationObserver(function(){ requestAnimationFrame(fit); })
+      .observe(document.body, { attributes:true, attributeFilter:['class'] });
+  }catch(e){}
+
+  /* ---------------- controls ---------------- */
+  function bindCheck(id, key){
+    document.getElementById(id).addEventListener('change', function(e){ S[key] = e.target.checked; apply(); });
+  }
+  bindCheck('c12', 'format12');
+  bindCheck('cSec', 'seconds');
+  bindCheck('cSecOn', 'blink');
+  bindCheck('cSound', 'sound');
+  bindCheck('cPipe', 'pipe');
+
+  function bindRange(id, key, outId, suffix){
+    document.getElementById(id).addEventListener('input', function(e){
+      S[key] = parseFloat(e.target.value);
+      document.getElementById(outId).textContent = e.target.value + suffix;
+      apply();
+    });
+  }
+  bindRange('rSize', 'size', 'vSize', 'px');
+  bindRange('rGap', 'gap', 'vGap', '%');
+  bindRange('rRadius', 'radius', 'vRadius', '%');
+  bindRange('rShadow', 'shadow', 'vShadow', '%');
+
+  document.getElementById('fontSel').addEventListener('change', function(e){ S.font = e.target.value; apply(); });
+  document.getElementById('dateStyle').addEventListener('change', function(e){ S.dateStyle = e.target.value; apply(); });
+  document.getElementById('captionInput').addEventListener('input', function(e){
+    S.caption = e.target.value;
+    captionEl.textContent = S.caption;   // live, without re-applying everything
+    save();
+  });
+  document.getElementById('colCard').addEventListener('input',  function(e){ S.card  = e.target.value; apply(); });
+  document.getElementById('colDigit').addEventListener('input', function(e){ S.digit = e.target.value; apply(); });
+  document.getElementById('colBg').addEventListener('input',    function(e){ S.bg    = e.target.value; apply(); });
+
+  var swWrap = document.getElementById('swatches');
+  THEMES.forEach(function(t){
+    var btn = document.createElement('button');
+    btn.className = 'swatch'; btn.dataset.theme = t.id; btn.title = t.id;
+    btn.style.setProperty('--sw-bg', t.bg);
+    btn.style.setProperty('--sw-card', t.card);
+    btn.innerHTML = '<span></span><span></span>';
+    btn.addEventListener('click', function(){ S.theme = t.id; apply(); });
+    swWrap.appendChild(btn);
+  });
+
+  document.getElementById('btnPanel').addEventListener('click', function(){ document.body.classList.toggle('panel-open'); });
+  document.getElementById('btnClose').addEventListener('click', function(){ document.body.classList.remove('panel-open'); });
+  document.addEventListener('click', function(e){
+    if(!document.body.classList.contains('panel-open')) return;
+    if(e.target.closest('.panel') || e.target.closest('#btnPanel')) return;
+    document.body.classList.remove('panel-open');
+  });
+
+  function toggleZen(){ document.body.classList.toggle('zen'); }
+  document.getElementById('btnZen').addEventListener('click', toggleZen);
+
+  document.getElementById('btnFull').addEventListener('click', function(){
+    try{
+      if(!document.fullscreenElement && document.documentElement.requestFullscreen){
+        var p = document.documentElement.requestFullscreen();
+        if(p && p.catch) p.catch(function(){ toggleZen(); });
+      } else if(document.exitFullscreen){ document.exitFullscreen(); }
+    }catch(e){ toggleZen(); }
+  });
+
+  document.getElementById('btnReset').addEventListener('click', function(){
+    Object.assign(S, DEFAULTS); apply(true);
+  });
+
+  document.addEventListener('keydown', function(e){
+    var k = e.key.toLowerCase();
+    if(k === 'h') toggleZen();
+    else if(k === 'c') document.body.classList.toggle('panel-open');
+    else if(k === 'f') document.getElementById('btnFull').click();
+  });
+
+  window.addEventListener('resize', fit);
+
+  /* -------- URL parameters (for embeds) --------
+     ?theme=cream|ivory|blush|sage|sky|charcoal
+     &t12=0|1 (12-hour + AM/PM)  &sec=0|1  &date=long|medium|numeric|none
+     &blink=0|1  &sound=0|1  &font=didone|didoneBold|georgia|times|mono|sans
+     &size=130  &gap=8.5  &radius=12  &shadow=20
+     &card=222222  &digit=ffffff  &bg=FAEBDD  &caption=Hello  &ui=0
+  --------------------------------------------- */
+  function readParams(){
+    var q;
+    try{ q = new URLSearchParams(window.location.search); }catch(e){ return; }
+
+    if(q.has('theme')){ var t = q.get('theme'); if(themeById(t).id === t) S.theme = t; }
+    if(q.has('font') && FONTS[q.get('font')]) S.font = q.get('font');
+    if(q.has('date')){
+      var d = q.get('date');
+      if(['long','medium','numeric','none'].indexOf(d) >= 0) S.dateStyle = d;
+    }
+    var flags = { t12:'format12', sec:'seconds', blink:'blink', sound:'sound' };
+    Object.keys(flags).forEach(function(k){
+      if(q.has(k)){ var v = q.get(k); S[flags[k]] = !(v === '0' || v === 'false' || v === 'off'); }
+    });
+    var nums = { size:'size', gap:'gap', radius:'radius', shadow:'shadow' };
+    Object.keys(nums).forEach(function(k){
+      var v = parseFloat(q.get(k));
+      if(!isNaN(v) && q.has(k)) S[nums[k]] = v;
+    });
+    if(q.has('caption')) S.caption = String(q.get('caption')).slice(0,48);
+    ['card','digit','bg'].forEach(function(k){
+      if(q.has(k)){
+        var v = String(q.get(k)).trim();
+        if(/^#?[0-9a-fA-F]{6}$/.test(v)) S[k] = (v.charAt(0) === '#' ? v : '#' + v);
+      }
+    });
+    if(q.get('ui') === '0') document.body.classList.add('zen');
+  }
+
+  /* ---------------- go ---------------- */
+  readParams();
+  apply(true);
+  setInterval(tick, 200);
+})();
+</script>
+</body>
+</html>
